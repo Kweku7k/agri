@@ -4,7 +4,7 @@ from wtforms.validators import DataRequired, Email, Length, EqualTo, ValidationE
 from flask_wtf.file import FileField, FileAllowed
 from wtforms.widgets import TextArea
 from wtforms.fields import MultipleFileField
-from app import User
+# from main import User
 
 class RegistrationForm(FlaskForm):
     username = StringField('Name', validators=[DataRequired(),  Regexp(r'^[\w.@+-]+$', message="Username must not include spaces") ,Length(max=10, message="Should be less than 10 characters")])
@@ -13,10 +13,10 @@ class RegistrationForm(FlaskForm):
     confirm_password = PasswordField('Confirm Password', validators=[DataRequired(), EqualTo('password')])
     submit = SubmitField('Sign Up')
 
-    def validate_phone(self, phone):
-        user = User.query.filter_by(phone=phone.data).first()
-        if user:
-            raise ValidationError('That phone number is taken. Please choose a different one.')
+    # def validate_phone(self, phone):
+    #     user = User.query.filter_by(phone=phone.data).first()
+    #     if user:
+    #         raise ValidationError('That phone number is taken. Please choose a different one.')
 
 class DeliveryForm(FlaskForm):
     username = StringField('Name', validators=[DataRequired(),  Regexp(r'^[\w.@+-]+$', message="Username must not include spaces") ,Length(max=10, message="Should be less than 10 characters")])

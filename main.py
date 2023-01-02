@@ -134,6 +134,13 @@ class Ticket(db.Model):
 
 from forms import *
 
+@app.route('/naloSms', methods=['GET', 'POST'])
+def sendNaloSms():
+    message = requests.get("https://sms.nalosolutions.com/smsbackend/clientapi/PrestoGh/send-message/?key=a)1ty#duwgrigdb0dc4mqa(frd2r14s46lh#0cscage_k!f#te0m3reiu39_h10k&type=0&destination=233545977791&dlr=1&source=PrestoGh&message=This+is+a+test+from+Mars")
+    print(message.content)
+    return message.content
+
+# curl --location --request GET '233XXXXXXXXXmessage=This+is+a+test+from+Mars'
 
 def save_picture(form_picture):
     random_hex = secrets.token_hex(8)
@@ -170,7 +177,8 @@ def findSession(sessionId, data):
     print("Finding session with id " + sessionId)
     session = Session.query.filter_by(sessionId = sessionId).first()
     # read data - touchdown0.1
-    if data == '*920*127*01':
+    # Find code
+    if data == '*920*128*02':
         print("data")
         # by default there is no session attatched here!
         newSession = Session(event = "01", sessionId = sessionId)
@@ -178,13 +186,13 @@ def findSession(sessionId, data):
         db.session.commit()
         return session
     # nightUnderTheStars 
-    elif data == '*920*127*1':
-        print("data")
-        # by default there is no session attatched here!
-        newSession = Session(event = "1", sessionId = sessionId)
-        db.session.add(newSession)
-        db.session.commit()
-        return session
+    # elif data == '*920*127*1':
+    #     print("data")
+    #     # by default there is no session attatched here!
+    #     newSession = Session(event = "1", sessionId = sessionId)
+    #     db.session.add(newSession)
+    #     db.session.commit()
+    #     return session
     # touchdown 
     else:
         # This is a continuing session
@@ -197,8 +205,6 @@ def findSession(sessionId, data):
     else:
         newSession = Session(event = "01", sessionId=sessionId)
         db.session.add(newSession)
-
-
 
 
 def searchitem(searchquery):
@@ -829,6 +835,23 @@ def extractNumbersFromExcel(filename):
         return make_response(all)
 
 
+@app.route('/broadcastMessage', methods=['GET', 'POST'])
+def broadcastMessage():
+    contacts = fetchAllNumbers()
+    print("Done fetching numbers!")
+    for contact in contacts:
+        # print(sendRancardMessage(contact, "talanku.com is hosting our first ever movie night here in Pronto hostels this evening!!!. Join the poll and win airbeds, airchairs and other accessories for the night by dialing *920*127#. "))
+        print(sendRancardMessage(contact, "The movie is starting!!!. \nCome to Pronto Hostels to find out which movie won the poll. Please sign our banner out front! This is a free talanku.com event."))
+    return "Done!" 
+
+@app.route('/pollresults', methods=['GET', 'POST'])
+def pollresults():
+    array = []
+    for number in Poll.query.all():
+        array.append(number.phoneNumber)
+    print (len(array))
+    return "array"
+
 @app.route('/fetchAllNumbers', methods=['GET', 'POST'])
 def fetchAllNumbers():
     allNumbers = []
@@ -856,13 +879,12 @@ def fetchAllNumbers():
                 bothNumbers = number.split("/", 1)
                 for singleNumber in bothNumbers:
                     finalArray.append(singleNumber)
-
             elif number == " " or number == "" or number == "null" or number == "PHONE NUMBER":
                 print(number + " is not being added")
                 pass
             else:
                 print(len(finalArray))
-    return finalArray
+    return "finalArray"
 
 def checkForPollSession(sessionId, data):
  # Search db for a session with that Id
@@ -914,7 +936,7 @@ def ticketPoll():
     data = request.json['USERDATA']
     print(data)
 
-    session = findSession(sessionId, data)
+    poll = findSession(sessionId, data)
     if poll:
         print(poll)
         # TODO : Fill the fields for repr for poll.
@@ -938,7 +960,7 @@ def ticketPoll():
             response = {
                 "USERID": "prestoGh",
                 "MSISDN":msisdn,
-                "MSG":"Which of these movies would you like to see \n 1. Black Panther  \n 2. Cruella \n 3. This Lady Called Life \n 4. Black Widow \n 5. Fatherhood ",
+                "MSG":"Which of these movies would you like to see \n 1. After Ever Happy  \n 2. Cruella \n 3. This Lady Called Life \n 4. Black Widow \n 5. Fatherhood ",
                 "MSGTYPE":True
             }
             resp = make_response(response)

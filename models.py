@@ -1,6 +1,6 @@
 from itsdangerous import TimedJSONWebSignatureSerializer as Serializer
 from datetime import datetime
-from app import db, login_manager, app
+from main import db, login_manager, app
 from flask_login import UserMixin
 
 class Order(db.Model):
