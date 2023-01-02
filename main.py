@@ -115,6 +115,24 @@ class Poll(db.Model):
         return f"Movie('{self.movie}', 'Probability: {self.probability}',  )"
 
 
+class Event(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(), nullable=False)
+    code = db.Column(db.String(), nullable=True)
+    contact = db.Column(db.String(), nullable=True)
+    totalSold = db.Column(db.String(), default = 0)
+    paid = db.Column(db.Boolean, nullable=True)
+    cost = db.Column(db.Boolean, nullable=True)
+    price = db.Column(db.Float(), nullable=True)
+    active = db.Column(db.Boolean, nullable=True)
+    organiser = db.Column(db.String(), nullable=True)
+    date_ending = db.Column(db.DateTime())
+    date_created = db.Column(db.DateTime(), default = datetime.utcnow())
+    
+    def __repr__(self): 
+        return f"Event('{self.id}', 'Paid: {self.name}' )"
+
+
 class Ticket(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     sessionId = db.Column(db.String(), nullable=False)
@@ -125,11 +143,11 @@ class Ticket(db.Model):
     paid = db.Column(db.Boolean, nullable=True)
     code = db.Column(db.String(), nullable=True)
     bought = db.Column(db.String(), nullable=True)
+    total = db.Column(db.Float(), default=0.00)
     event = db.Column(db.String(), nullable=True)
     
     def __repr__(self): 
         return f"Ticket('{self.id}', 'Paid: {self.paid}',  )"
-
 
 
 from forms import *
@@ -173,38 +191,45 @@ def save_picture_to_firebase(form_picture):
 
 src="../static/items/92f33ab490e95eca.jpg"
 
-def findSession(sessionId, data):
-    print("Finding session with id " + sessionId)
-    session = Session.query.filter_by(sessionId = sessionId).first()
-    # read data - touchdown0.1
-    # Find code
-    if data == '*920*128*02':
-        print("data")
-        # by default there is no session attatched here!
-        newSession = Session(event = "01", sessionId = sessionId)
-        db.session.add(newSession)
-        db.session.commit()
-        return session
-    # nightUnderTheStars 
-    # elif data == '*920*127*1':
-    #     print("data")
-    #     # by default there is no session attatched here!
-    #     newSession = Session(event = "1", sessionId = sessionId)
-    #     db.session.add(newSession)
-    #     db.session.commit()
-    #     return session
-    # touchdown 
+def naloresponse(msisdn, message, reply):
+    response = {
+            "USERID": "prestoGh",
+            "MSISDN":msisdn,
+            "MSG":message,
+            "MSGTYPE":reply
+        }
+    return response
+
+
+def findTicketSession(session):
+    print("Session id: " + session["SESSIONID"]+ " \nSession Data: " + session["USERDATA"])
+    ticket = Ticket.query.filter_by(sessionId = session["SESSIONID"]).first() 
+
+    if ticket == None:
+        print("Attempting to create a new session.")
+        event = Event.query.filter_by(code = session["USERDATA"]).first() 
+        
+        if event != None: 
+            print("Event :" + event.name + "has been found")
+            ticket = Ticket(sessionId = session["SESSIONID"])
+
+            try:
+                db.session.add(ticket)
+                db.session.commit()
+                print("Ticket Session :" + ticket.sessionId + "has been created successfully")
+            except Exception as e:
+                print(e)
+                print("Could not create Ticket Session " + session["SESSIONID"])
+            return ticket
+
+        else:
+            print("Could not find code: "+ session["USERDATA"])
+            return make_response(naloresponse(session["MSISDN"], "Sorry, we didnt find any event with that code. \nPowered By Presto Ghana", False))
+
     else:
-        # This is a continuing session
-        Session.query.filter_by(sessionId = sessionId).first()
-    # If no session was found
-    if session != None:
-        print(session.event)
-        return session.event
-    # If session was found
-    else:
-        newSession = Session(event = "01", sessionId=sessionId)
-        db.session.add(newSession)
+        print("Session Id: " + session["SESSIONID"] + " found!")
+        print(ticket)
+        return ticket
 
 
 def searchitem(searchquery):
@@ -914,6 +939,21 @@ def checkForPollSession(sessionId, data):
     print(session)
     return session
 
+@app.route('/newEvent', methods=['GET', 'POST'])
+def createEvent():
+    event = request.json
+    print(event)
+
+    try:
+        newEvent = Event(name=event["name"], contact=event["contact"], organiser=event["organiser"], code=event["code"])
+        db.session.add(newEvent)
+        db.session.commit()
+    except Exception as e:
+        print(e)
+        print("Exception!")
+
+    return event
+
 @app.route('/polls', methods=['GET', 'POST'])
 def polls():
     poll = Movies.query.order_by(Movies.count.desc()).all()
@@ -923,10 +963,17 @@ def broadcastPoll(poll, msisdn):
     code = get_random_string(5)
     sendtelegram("New Poll! \n Movie - " + str(poll.movie) + "Phone: " + poll.phoneNumber +  "\n Have you heard of talanku before? - " + str(poll.tlk) + " \n Service rating - " +  str(poll.probability) )
     sendRancardMessage(msisdn,'Congratulations! your ' + poll.movie + ' recommendation for our movie night on the 26th November has been recieved. \n Poll results are live at \n https://talanku.com')
-            
+
+
+def getAllEvents():
+    events = ""
+    for e in Event.query.all():
+        events += "" + str(e.id) + " " + e.name + "\n"
+        print(events)
+    return str(events)
 
 @app.route('/naloussd', methods=['GET', 'POST'])
-def ticketPoll():
+def prestoTickets():
     print(request.json)
     sessionId = request.json['SESSIONID']
     # menu = request.json['USERDATA']
@@ -936,112 +983,163 @@ def ticketPoll():
     data = request.json['USERDATA']
     print(data)
 
-    poll = findSession(sessionId, data)
-    if poll:
-        print(poll)
-        # TODO : Fill the fields for repr for poll.
-        # If a poll has an event.
-        if poll.event == None:
-            poll.event = "A Night Under The Stars"
-            poll.phoneNumber = msisdn
-            db.session.commit()
-            response = {
-                "USERID": "prestoGh",
-                "MSISDN":msisdn,
-                "MSG":"Welcome to the poll for A Night Under The Stars powered by talanku.com. \n Press 1 to continue",
-                "MSGTYPE":True
-            }
-            resp = make_response(response)
-            return resp
+    ticket = findTicketSession(request.json)
 
-        elif poll.startDate == None:
-            poll.startDate = datetime.now()
-            db.session.commit()
-            response = {
-                "USERID": "prestoGh",
-                "MSISDN":msisdn,
-                "MSG":"Which of these movies would you like to see \n 1. After Ever Happy  \n 2. Cruella \n 3. This Lady Called Life \n 4. Black Widow \n 5. Fatherhood ",
-                "MSGTYPE":True
-            }
-            resp = make_response(response)
-            return resp
-
-        elif poll.movie == None:
-
-            movie = Movies.query.get_or_404(data)
-            movie.count = int(movie.count) + int(data)
-            print(movie.name + " has been update to " + str(movie.count))
-
-            poll.movie = movie.name
+    if ticket:
+        print(ticket)
+        
+        if ticket.phoneNumber == None:
+            ticket.phoneNumber = msisdn
             db.session.commit()
 
-            response = {
-                "USERID": "prestoGh",
-                "MSISDN":msisdn,
-                "MSG":"Have you used talanku.com before? \n 1.Yes \n 2.No",
-                "MSGTYPE":True
-            }
-            resp = make_response(response)
-            return resp
+            message = "Welcome to Presto Tickets\n Please choose an event." + getAllEvents()
+            return make_response(naloresponse(msisdn, message, True))
 
-        elif poll.tlk == None and data == "1":
-            poll.tlk = True
+        elif ticket.event == None:
+            ticket.event = data
             db.session.commit()
-            print("poll.tlk has bee set to True")
-            response = {
-                "USERID": "prestoGh",
-                "MSISDN":msisdn,
-                "MSG":"On a scale of 1 to 10, how was the service?!",
-                "MSGTYPE":True
-            }
-            resp = make_response(response)
-            return resp
+            return make_response(naloresponse(msisdn, "Please enter your name", True ))
 
-        elif poll.tlk == None and data == "2":
-            poll.tlk = False
-            poll.probability = 0
+        elif ticket.name == None:
+            ticket.name = data
             db.session.commit()
-            print("poll.tlk has bee set to True")
-            response = {
-                "USERID": "prestoGh",
-                "MSISDN":msisdn,
-                "MSG":"Thank you for your input. Poll results are live on talanku.com/polls! \n Visit talanku.com for more information",
-                "MSGTYPE":True
-            }
-            broadcastPoll(poll, msisdn)
-            resp = make_response(response)
-            return resp
+            return make_response(naloresponse(msisdn,"Hi "+ ticket.name +"\nHow many tickets are you buying?", True ))
 
-        elif poll.probability == None:
-            poll.probability = data
-            db.session.commit()
-            response = {
-                "USERID": "prestoGh",
-                "MSISDN":msisdn,
-                "MSG":"Thank you for your input. Poll results will go live on Friday! \n Visit talanku.com for more information",
-                "MSGTYPE":False
-            }
+        elif ticket.numberOfTickets == None:
+            ticket.numberOfTickets = data
+            print("Number Of Tickets: " + data)
 
-            broadcastPoll(poll, msisdn)
+            cost = Event.query.get_or_404(ticket.event)
+            ticket.total = float(data) * cost.price
 
-            # code = get_random_string(5)
-            # sendtelegram("New Poll! \n Movie - " + poll.movie + " Have you heard of talanku before? - " + poll.tlk + "Service rating" + poll.probability )
-            # sendRancardMessage(msisdn,'Congratulations! your ' + poll.movie + ' recommendation for our movie night on the 26th November has been recieved.. Your ticket code is: '+ str(code) + ' \n' +   'Powered by PrestoTickets')
+            # db.session.commit()
+            message = "Please confirm this purchase /n" + "Number Of Tickets - " + ticket.numberOfTickets + "/nTotal: " + str(ticket.total) + "\n1.Confirm \2.Cancel"  
+            return make_response(naloresponse(msisdn,message, True ))
 
-            resp = make_response(response)
-            return resp 
+    else:
+        return make_response(naloresponse(msisdn, "There was a problem. Please try again alittle later while we rectify the issue. " , False))
+        # elif ticket.confirmTickets == None:
+            # if data == 1:  
+                
+            #     {
+            #         "firstName":"Uncle",
+            #         "lastName":"Adums",
+            #         "phone":"0545977791",
+            #         "callbackUrl":"https://prestoghana.com",
+            #         "appId":"PrestoSolutions",
+            #         "paymentId":"12",
+            #         "amount":0.10,
+            #         "ref":"12",
+            #         "recipient":"tca",
+            #         "percentage":"10",
+            #         "dateCreated":"10/Dec/2022 12:44:38",
+            #         "network":"MTN"
+            #     }
 
-        else:
-            response = {
-                "USERID": "prestoGh",
-                "MSISDN":msisdn,
-                "MSG":"Oops, if you are seeing this, then Nana Kweku Really FuckUp on this USSD",
-                "MSGTYPE":False
-            }
-            sendtelegram("New Poll! \n Movie - " + poll.movie + " Have you heard of talanku before? - " + poll.tlk + "Service rating -  \n" + poll.probability )
+                # request.post('prestoghana.com/korba', data = paymentInfo)
 
-            resp = make_response(response)
-            return resp
+
+
+
+            
+
+        
+
+
+
+
+
+
+
+        # elif ticket.startDate == None:
+        #     ticket.event = "Touchbase2.0"
+        #     ticket.startDate = datetime.now()
+        #     db.session.commit()
+        #     response = {
+        #         "USERID": "prestoGh",
+        #         "MSISDN":msisdn,
+        #         "MSG":"How many " + ticket.event + " tickets do you want to buy",
+        #         "MSGTYPE":True
+        #     }
+        #     resp = make_response(response)
+        #     return resp
+
+        # elif ticket.movie == None:
+
+        #     movie = Movies.query.get_or_404(data)
+        #     movie.count = int(movie.count) + int(data)
+        #     print(movie.name + " has been update to " + str(movie.count))
+
+        #     ticket.movie = movie.name
+        #     db.session.commit()
+
+        #     response = {
+        #         "USERID": "prestoGh",
+        #         "MSISDN":msisdn,
+        #         "MSG":"Have you used talanku.com before? \n 1.Yes \n 2.No",
+        #         "MSGTYPE":True
+        #     }
+        #     resp = make_response(response)
+        #     return resp
+
+        # elif ticket.tlk == None and data == "1":
+        #     ticket.tlk = True
+        #     db.session.commit()
+        #     print("poll.tlk has bee set to True")
+        #     response = {
+        #         "USERID": "prestoGh",
+        #         "MSISDN":msisdn,
+        #         "MSG":"On a scale of 1 to 10, how was the service?!",
+        #         "MSGTYPE":True
+        #     }
+        #     resp = make_response(response)
+        #     return resp
+
+        # elif poll.tlk == None and data == "2":
+        #     poll.tlk = False
+        #     poll.probability = 0
+        #     db.session.commit()
+        #     print("poll.tlk has bee set to True")
+        #     response = {
+        #         "USERID": "prestoGh",
+        #         "MSISDN":msisdn,
+        #         "MSG":"Thank you for your input. Poll results are live on talanku.com/polls! \n Visit talanku.com for more information",
+        #         "MSGTYPE":True
+        #     }
+        #     broadcastPoll(poll, msisdn)
+        #     resp = make_response(response)
+        #     return resp
+
+        # elif poll.probability == None:
+        #     poll.probability = data
+        #     db.session.commit()
+        #     response = {
+        #         "USERID": "prestoGh",
+        #         "MSISDN":msisdn,
+        #         "MSG":"Thank you for your input. Poll results will go live on Friday! \n Visit talanku.com for more information",
+        #         "MSGTYPE":False
+        #     }
+
+        #     broadcastPoll(poll, msisdn)
+
+        #     # code = get_random_string(5)
+        #     # sendtelegram("New Poll! \n Movie - " + poll.movie + " Have you heard of talanku before? - " + poll.tlk + "Service rating" + poll.probability )
+        #     # sendRancardMessage(msisdn,'Congratulations! your ' + poll.movie + ' recommendation for our movie night on the 26th November has been recieved.. Your ticket code is: '+ str(code) + ' \n' +   'Powered by PrestoTickets')
+
+        #     resp = make_response(response)
+        #     return resp 
+
+        # else:
+        #     response = {
+        #         "USERID": "prestoGh",
+        #         "MSISDN":msisdn,
+        #         "MSG":"Oops, if you are seeing this, then Nana Kweku Really FuckUp on this USSD",
+        #         "MSGTYPE":False
+        #     }
+        #     sendtelegram("New Poll! \n Movie - " + poll.movie + " Have you heard of talanku before? - " + poll.tlk + "Service rating -  \n" + poll.probability )
+
+        #     resp = make_response(response)
+        #     return resp
 
 
 if __name__ == '__main__':
