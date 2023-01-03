@@ -8,6 +8,7 @@ from datetime import datetime
 from urllib import response
 import urllib.request, urllib.parse
 import urllib
+import httpx
 from flask import Flask, render_template, redirect, flash, url_for, request, session, make_response
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin, login_user, current_user, logout_user
@@ -124,6 +125,7 @@ class Event(db.Model):
     paid = db.Column(db.Boolean, nullable=True)
     cost = db.Column(db.Boolean, nullable=True)
     price = db.Column(db.Float(), nullable=True)
+    charges = db.Column(db.Float(), nullable=True)
     active = db.Column(db.Boolean, nullable=True)
     organiser = db.Column(db.String(), nullable=True)
     date_ending = db.Column(db.DateTime())
@@ -154,7 +156,7 @@ from forms import *
 
 @app.route('/naloSms', methods=['GET', 'POST'])
 def sendNaloSms():
-    message = requests.get("https://sms.nalosolutions.com/smsbackend/clientapi/PrestoGh/send-message/?key=a)1ty#duwgrigdb0dc4mqa(frd2r14s46lh#0cscage_k!f#te0m3reiu39_h10k&type=0&destination=233545977791&dlr=1&source=PrestoGh&message=This+is+a+test+from+Mars")
+    message = requests.get("https://sms.nalosolutions.com/smsbackend/clientapi/Resl_Nalo/send-message/?key=a)1ty#duwgrigdb0dc4mqa(frd2r14s46lh#0cscage_k!f#te0m3reiu39_h10k&type=0&destination=233545977791&dlr=1&source=PrestoGh&message=This+is+a+test+from+Mars")
     print(message.content)
     return message.content
 
@@ -210,17 +212,19 @@ def findTicketSession(session):
         event = Event.query.filter_by(code = session["USERDATA"]).first() 
         
         if event != None: 
-            print("Event :" + event.name + "has been found")
+            print("Event:" + event.name + " has been found")
             ticket = Ticket(sessionId = session["SESSIONID"])
 
             try:
                 db.session.add(ticket)
                 db.session.commit()
-                print("Ticket Session :" + ticket.sessionId + "has been created successfully")
+                print("Ticket Session :" + ticket.sessionId + " has been created successfully")
+                return ticket
             except Exception as e:
                 print(e)
                 print("Could not create Ticket Session " + session["SESSIONID"])
-            return ticket
+                return make_response(naloresponse(session["MSISDN"], "Sorry, we didnt find any event with that code. \nPowered By Presto Ghana", False))
+
 
         else:
             print("Could not find code: "+ session["USERDATA"])
@@ -965,10 +969,18 @@ def broadcastPoll(poll, msisdn):
     sendRancardMessage(msisdn,'Congratulations! your ' + poll.movie + ' recommendation for our movie night on the 26th November has been recieved. \n Poll results are live at \n https://talanku.com')
 
 
+def findEvent(msisdn, id):
+    event = Event.query.get_or_404(id)
+    if event == None:
+        return naloresponse(msisdn, "There was no event with that option please check and try again.", False )
+    else:
+        return event
+
+
 def getAllEvents():
     events = ""
     for e in Event.query.all():
-        events += "" + str(e.id) + " " + e.name + "\n"
+        events += "" + str(e.id) + ". " + e.name + "\n"
         print(events)
     return str(events)
 
@@ -984,6 +996,7 @@ def prestoTickets():
     print(data)
 
     ticket = findTicketSession(request.json)
+    print("ticket")
 
     if ticket:
         print(ticket)
@@ -991,155 +1004,95 @@ def prestoTickets():
         if ticket.phoneNumber == None:
             ticket.phoneNumber = msisdn
             db.session.commit()
-
-            message = "Welcome to Presto Tickets\n Please choose an event." + getAllEvents()
-            return make_response(naloresponse(msisdn, message, True))
+            return make_response(naloresponse(msisdn,"Welcome to Presto Tickets\n Please choose an event. \n" + getAllEvents(), True))
 
         elif ticket.event == None:
+            # if event not found
+            print(ticket.event)
             ticket.event = data
             db.session.commit()
-            return make_response(naloresponse(msisdn, "Please enter your name", True ))
+            return make_response(naloresponse(msisdn, "Please enter your name \n00.Go Back", True ))
 
         elif ticket.name == None:
-            ticket.name = data
-            db.session.commit()
-            return make_response(naloresponse(msisdn,"Hi "+ ticket.name +"\nHow many tickets are you buying?", True ))
+            if data == "00":
+                ticket.event = None
+                db.session.commit()
+                return make_response(naloresponse(msisdn,"Welcome to Presto Tickets\n Please choose an event. \n" + getAllEvents(), True))
+            else:
+                ticket.name = data
+                db.session.commit()
+                cost = Event.query.get_or_404(ticket.event).price
+                print(ticket.event)
+                return make_response(naloresponse(msisdn,"Hi "+ ticket.name +"\n1 Ticket = Ghc" + str(cost) +" \nHow many tickets are you buying? \n00. Go back", True ))
 
         elif ticket.numberOfTickets == None:
-            ticket.numberOfTickets = data
-            print("Number Of Tickets: " + data)
+            if data == "00":
+                print("Reversing to Name")
 
-            cost = Event.query.get_or_404(ticket.event)
-            ticket.total = float(data) * cost.price
+                ticket.name = None
+                db.session.commit()
+                return make_response(naloresponse(msisdn,"Please enter your name \n00.Go Back" + getAllEvents(), True))
+            
+            else:
+                ticket.numberOfTickets = data
+                print("Number Of Tickets: " + data)
 
-            # db.session.commit()
-            message = "Please confirm this purchase /n" + "Number Of Tickets - " + ticket.numberOfTickets + "/nTotal: " + str(ticket.total) + "\n1.Confirm \2.Cancel"  
-            return make_response(naloresponse(msisdn,message, True ))
+                event = Event.query.get_or_404(ticket.event)
+                cost = event.cost
+                total = float(data) * event.price 
+                charges = event.charges * total
+
+                ticket.total = total + charges
+                db.session.commit()
+
+                message = "Please confirm this purchase \n" + "Number Of Tickets - " + ticket.numberOfTickets + "\nCharges: Ghc" + str(charges)  + "\nTotal: Ghc" + str(ticket.total) + "\n1.Confirm \n00.Back \n2.Cancel"  
+                return make_response(naloresponse(msisdn,message, True))
+
+        elif ticket.confirmTickets == None:
+            print("Confirming Ticket")
+            event = Event.query.get_or_404(ticket.event)
+            if data == "00":
+                ticket.numberOfTickets = None
+                db.session.commit()
+                # return make_response(naloresponse(msisdn,"Please enter your name \n00.Go Back" + getAllEvents(), True))
+                cost = event.price
+                return make_response(naloresponse(msisdn,"Hi "+ ticket.name +"\n1 Ticket = Ghc" + str(cost) +" \nHow many tickets are you buying? \n00. Go back", True ))
+
+            elif data == "2":
+                # ticket.confirmTickets = None
+                # db.session.commit()
+                return make_response(naloresponse(msisdn,"Thanks for using PrestoTickets" + getAllEvents(), False))
+
+            elif data == "1":
+                ticket.confirmTickets = data
+                # db.session.commit()
+                payementInfo={
+                    "firstName":ticket.name,
+                    "lastName":"Touchdown2.0",
+                    "phone": "0"+msisdn[-9:],
+                    "callbackUrl":"https://talanku.com/confirmTicket/"+str(ticket.id),
+                    "appId":event.organiser,
+                    "paymentId":"12",
+                    "amount":str(ticket.total),
+                    "ref":ticket.name,
+                    "recipient":event.organiser,
+                    "percentage":str(event.charges),
+                    "network":mobileNetwork
+                }
+                print(payementInfo)
+
+                r = requests.post('https://prestoghana.com/korba', json=payementInfo)
+                print(r.content)
+                # print(r.json)
+                return make_response(naloresponse(msisdn,"Please wait while we trigger a total payment of Ghc" + str(ticket.total) + "." , False ))
 
     else:
         return make_response(naloresponse(msisdn, "There was a problem. Please try again alittle later while we rectify the issue. " , False))
-        # elif ticket.confirmTickets == None:
-            # if data == 1:  
-                
-            #     {
-            #         "firstName":"Uncle",
-            #         "lastName":"Adums",
-            #         "phone":"0545977791",
-            #         "callbackUrl":"https://prestoghana.com",
-            #         "appId":"PrestoSolutions",
-            #         "paymentId":"12",
-            #         "amount":0.10,
-            #         "ref":"12",
-            #         "recipient":"tca",
-            #         "percentage":"10",
-            #         "dateCreated":"10/Dec/2022 12:44:38",
-            #         "network":"MTN"
-            #     }
-
-                # request.post('prestoghana.com/korba', data = paymentInfo)
-
-
-
-
-            
-
         
+@app.route('/confirmTicket', methods=['GET', 'POST'])
+def confirmTicket():
 
-
-
-
-
-
-
-        # elif ticket.startDate == None:
-        #     ticket.event = "Touchbase2.0"
-        #     ticket.startDate = datetime.now()
-        #     db.session.commit()
-        #     response = {
-        #         "USERID": "prestoGh",
-        #         "MSISDN":msisdn,
-        #         "MSG":"How many " + ticket.event + " tickets do you want to buy",
-        #         "MSGTYPE":True
-        #     }
-        #     resp = make_response(response)
-        #     return resp
-
-        # elif ticket.movie == None:
-
-        #     movie = Movies.query.get_or_404(data)
-        #     movie.count = int(movie.count) + int(data)
-        #     print(movie.name + " has been update to " + str(movie.count))
-
-        #     ticket.movie = movie.name
-        #     db.session.commit()
-
-        #     response = {
-        #         "USERID": "prestoGh",
-        #         "MSISDN":msisdn,
-        #         "MSG":"Have you used talanku.com before? \n 1.Yes \n 2.No",
-        #         "MSGTYPE":True
-        #     }
-        #     resp = make_response(response)
-        #     return resp
-
-        # elif ticket.tlk == None and data == "1":
-        #     ticket.tlk = True
-        #     db.session.commit()
-        #     print("poll.tlk has bee set to True")
-        #     response = {
-        #         "USERID": "prestoGh",
-        #         "MSISDN":msisdn,
-        #         "MSG":"On a scale of 1 to 10, how was the service?!",
-        #         "MSGTYPE":True
-        #     }
-        #     resp = make_response(response)
-        #     return resp
-
-        # elif poll.tlk == None and data == "2":
-        #     poll.tlk = False
-        #     poll.probability = 0
-        #     db.session.commit()
-        #     print("poll.tlk has bee set to True")
-        #     response = {
-        #         "USERID": "prestoGh",
-        #         "MSISDN":msisdn,
-        #         "MSG":"Thank you for your input. Poll results are live on talanku.com/polls! \n Visit talanku.com for more information",
-        #         "MSGTYPE":True
-        #     }
-        #     broadcastPoll(poll, msisdn)
-        #     resp = make_response(response)
-        #     return resp
-
-        # elif poll.probability == None:
-        #     poll.probability = data
-        #     db.session.commit()
-        #     response = {
-        #         "USERID": "prestoGh",
-        #         "MSISDN":msisdn,
-        #         "MSG":"Thank you for your input. Poll results will go live on Friday! \n Visit talanku.com for more information",
-        #         "MSGTYPE":False
-        #     }
-
-        #     broadcastPoll(poll, msisdn)
-
-        #     # code = get_random_string(5)
-        #     # sendtelegram("New Poll! \n Movie - " + poll.movie + " Have you heard of talanku before? - " + poll.tlk + "Service rating" + poll.probability )
-        #     # sendRancardMessage(msisdn,'Congratulations! your ' + poll.movie + ' recommendation for our movie night on the 26th November has been recieved.. Your ticket code is: '+ str(code) + ' \n' +   'Powered by PrestoTickets')
-
-        #     resp = make_response(response)
-        #     return resp 
-
-        # else:
-        #     response = {
-        #         "USERID": "prestoGh",
-        #         "MSISDN":msisdn,
-        #         "MSG":"Oops, if you are seeing this, then Nana Kweku Really FuckUp on this USSD",
-        #         "MSGTYPE":False
-        #     }
-        #     sendtelegram("New Poll! \n Movie - " + poll.movie + " Have you heard of talanku before? - " + poll.tlk + "Service rating -  \n" + poll.probability )
-
-        #     resp = make_response(response)
-        #     return resp
+    pass
 
 
 if __name__ == '__main__':
