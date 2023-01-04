@@ -8,7 +8,6 @@ from datetime import datetime
 from urllib import response
 import urllib.request, urllib.parse
 import urllib
-import httpx
 from flask import Flask, render_template, redirect, flash, url_for, request, session, make_response
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin, login_user, current_user, logout_user
@@ -120,6 +119,7 @@ class Event(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(), nullable=False)
     code = db.Column(db.String(), nullable=True)
+    slug = db.Column(db.String(), nullable=True)
     contact = db.Column(db.String(), nullable=True)
     totalSold = db.Column(db.String(), default = 0)
     paid = db.Column(db.Boolean, nullable=True)
@@ -1042,6 +1042,7 @@ def prestoTickets():
                 total = float(data) * event.price 
                 charges = event.charges * total
 
+                ticket.bought = total
                 ticket.total = total + charges
                 db.session.commit()
 
@@ -1073,12 +1074,14 @@ def prestoTickets():
                     "callbackUrl":"https://talanku.com/confirmTicket/"+str(ticket.id),
                     "appId":event.organiser,
                     "paymentId":"12",
-                    "amount":str(ticket.total),
+                    "amount":0.20,
+                    "total":0.20,
                     "ref":ticket.name,
                     "recipient":event.organiser,
                     "percentage":str(event.charges),
                     "network":mobileNetwork
                 }
+
                 print(payementInfo)
 
                 r = requests.post('https://prestoghana.com/korba', json=payementInfo)
@@ -1089,11 +1092,23 @@ def prestoTickets():
     else:
         return make_response(naloresponse(msisdn, "There was a problem. Please try again alittle later while we rectify the issue. " , False))
         
-@app.route('/confirmTicket', methods=['GET', 'POST'])
-def confirmTicket():
+@app.route('/confirmTicket/<ticketId>', methods=['GET', 'POST'])
+def confirmTicket(ticketId):
+    print(ticketId)
+    ticket = Ticket.query.get_or_404(ticketId)
+    
+    if ticket != None:
+        if ticket.paid == False:
+            if request.status == "SUCCESS":
+                ticketCode = str(ticket.id)+str(prestoTransactionId)+str(event.slug)
+    # if successful
+    # if not already paid
+    # Generate ticket code = 1PRS34TB24QZF
+    # Send sms of confirmation wth nalo!
+    # Send telegram message
+    # generate qr code?
 
     pass
-
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=True)
