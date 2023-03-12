@@ -16,15 +16,16 @@ from PIL import Image
 from flask_migrate import Migrate
 import requests
 import random
+from csv import writer
 import string
 
 import json
 app = Flask(__name__)
 # app.config['SQLALCHEMY_DATABASE_URI']='postgres://jziidvhglkmwop:847579f0fc359140a5a832725e61db1c3754eb6523c12849558fbfd1bfa8a2cf@ec2-34-236-94-53.compute-1.amazonaws.com:5432/d11sblr8akns3e'
-# app.config['SQLALCHEMY_DATABASE_URI']='sqlite:///test.db'
+app.config['SQLALCHEMY_DATABASE_URI']='sqlite:///test.db'
 
 # working db ⬇️
-app.config['SQLALCHEMY_DATABASE_URI']='postgresql://hgikcuqfytwhhw:0665b5b321fccc2dbed4070c7c9451877b061d4fa9e3fc32b42220016d276222@ec2-44-195-132-31.compute-1.amazonaws.com:5432/d61i5rsnofs2q2'
+# app.config['SQLALCHEMY_DATABASE_URI']='postgresql://hgikcuqfytwhhw:0665b5b321fccc2dbed4070c7c9451877b061d4fa9e3fc32b42220016d276222@ec2-44-195-132-31.compute-1.amazonaws.com:5432/d61i5rsnofs2q2'
 # working db ⬆️
 
 # app.config['SQLALCHEMY_DATABASE_URI']='postgresql://postgres:admin@35.222.128.215:5432/talanku'
@@ -49,6 +50,7 @@ class Item(db.Model):
     vendor = db.Column(db.Integer, db.ForeignKey('user.id', ondelete="CASCADE"), nullable=False)
 def __repr__(self): 
     return f"Item('{self.name}', '{self.category}', )"
+
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -134,7 +136,7 @@ class Event(db.Model):
     def __repr__(self): 
         return f"Event('{self.id}', 'Paid: {self.name}' )"
 
-
+# CHANGES HERE SHOULD BE DONE IN generateMultipleCodes(ticket)
 class Ticket(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     sessionId = db.Column(db.String(), nullable=False)
@@ -142,23 +144,28 @@ class Ticket(db.Model):
     phoneNumber = db.Column(db.String(), nullable=True)
     numberOfTickets = db.Column(db.String(), nullable = True)
     confirmTickets =  db.Column (db.String(), nullable = True)
-    paid = db.Column(db.Boolean, nullable=True)
+    paid = db.Column(db.Boolean, nullable=True, default=False)
     code = db.Column(db.String(), nullable=True)
+    ticketCode = db.Column(db.String(), nullable=True)
     bought = db.Column(db.String(), nullable=True)
     total = db.Column(db.Float(), default=0.00)
     event = db.Column(db.String(), nullable=True)
+    scanned = db.Column(db.Boolean, nullable=True, default=False)
+    date_created = db.Column(db.DateTime(), default = datetime.utcnow())
+
+
     
     def __repr__(self): 
-        return f"Ticket('{self.id}', 'Paid: {self.paid}',  )"
+        return f"Ticket('{self.id}', 'Paid: {self.paid}'  )"
 
 
 from forms import *
 
 @app.route('/naloSms', methods=['GET', 'POST'])
-def sendNaloSms():
-    message = requests.get("https://sms.nalosolutions.com/smsbackend/clientapi/Resl_Nalo/send-message/?key=a)1ty#duwgrigdb0dc4mqa(frd2r14s46lh#0cscage_k!f#te0m3reiu39_h10k&type=0&destination=233545977791&dlr=1&source=PrestoGh&message=This+is+a+test+from+Mars")
-    print(message.content)
-    return message.content
+def sendNaloSms(message):
+    request = requests.get("https://sms.nalosolutions.com/smsbackend/clientapi/Resl_Nalo/send-message/?key=a)1ty#duwgrigdb0dc4mqa(frd2r14s46lh#0cscage_k!f#te0m3reiu39_h10k&type=0&destination=233545977791&dlr=1&source=PrestoGh&message="+message)
+    print(request.content)
+    return request.content
 
 # curl --location --request GET '233XXXXXXXXXmessage=This+is+a+test+from+Mars'
 
@@ -203,7 +210,7 @@ def naloresponse(msisdn, message, reply):
     return response
 
 
-def findTicketSession(session):
+def de(session):
     print("Session id: " + session["SESSIONID"]+ " \nSession Data: " + session["USERDATA"])
     ticket = Ticket.query.filter_by(sessionId = session["SESSIONID"]).first() 
 
@@ -224,7 +231,6 @@ def findTicketSession(session):
                 print(e)
                 print("Could not create Ticket Session " + session["SESSIONID"])
                 return make_response(naloresponse(session["MSISDN"], "Sorry, we didnt find any event with that code. \nPowered By Presto Ghana", False))
-
 
         else:
             print("Could not find code: "+ session["USERDATA"])
@@ -301,7 +307,16 @@ def searchitem(searchquery):
 #     print(searchResults)
 
 
-
+@app.route('/finditemdata/<string:itemName>', methods=['POST','GET'])
+def finditemdata(itemName):
+    orders = Order.query.all()
+    total = 0
+    for o in orders:
+        if o.items.find(itemName) != -1:
+            total += 1
+        else:
+            pass
+    return str(total)
 
 
 @app.route('/search', methods=['POST'])
@@ -640,7 +655,7 @@ def login():
             login_user(user)
             print ("Logged in:" + user.username + " " + user.phone)
             print(form.password.data)
-            return redirect(url_for('index'))
+            return redirect(url_for('home'))
         else:
             flash(f'Incorrect details, please try again', 'danger')
     return render_template('login.html', form=form)
@@ -834,6 +849,23 @@ def deleteOrder(id):
    
     return make_response(response)
 
+@app.route('/extractData', methods=['GET', 'POST'])
+def extractData():
+
+    orders = Order.query.all()
+
+    with open('backData.csv', 'w', encoding='utf-8', newline='') as f:
+        thewriter = writer(f)
+        header = ['OrderId', 'Name Of Item', 'Price']
+        thewriter.writerow(header)
+
+        for t in orders:
+            line = [str(t.id), t.name, t.price ]
+            thewriter.writerow(line)
+
+        return "done"
+
+    # flash(f'' + filename +' has been downloaded successfully')
 
 def extractNumbersFromExcel(filename):
      with open(filename, 'r') as csv_file:
@@ -868,9 +900,23 @@ def extractNumbersFromExcel(filename):
 def broadcastMessage():
     contacts = fetchAllNumbers()
     print("Done fetching numbers!")
+    # message = "Welcome back to school! \nDelivery prices have been discounted till 31st January. \nStay protected, order from https://talanku.com now"
+    message = "Welcome back to school! \nDelivery prices have been discounted till 18th February. \nStay protected, order from https://talanku.com now"
     for contact in contacts:
-        # print(sendRancardMessage(contact, "talanku.com is hosting our first ever movie night here in Pronto hostels this evening!!!. Join the poll and win airbeds, airchairs and other accessories for the night by dialing *920*127#. "))
-        print(sendRancardMessage(contact, "The movie is starting!!!. \nCome to Pronto Hostels to find out which movie won the poll. Please sign our banner out front! This is a free talanku.com event."))
+        print(contact)
+        print(sendRancardMessage(contact, message))
+    return "Done!" 
+
+@app.route('/broadcastSingleMessage', methods=['GET', 'POST'])
+def broadcastSingleMessage():
+    contact = "0556036658"
+    message = "Welcome back to school! \nDelivery prices have been discounted till 18th February. \nStay protected, order from https://talanku.com now"
+
+    try:
+        sendRancardMessage(contact,message)
+    except Exception as e:
+        print("Yawa")
+
     return "Done!" 
 
 @app.route('/pollresults', methods=['GET', 'POST'])
@@ -913,7 +959,7 @@ def fetchAllNumbers():
                 pass
             else:
                 print(len(finalArray))
-    return "finalArray"
+    return finalArray
 
 def checkForPollSession(sessionId, data):
  # Search db for a session with that Id
@@ -922,7 +968,7 @@ def checkForPollSession(sessionId, data):
     if session == None :
         session = Ticket.query.filter_by(sessionId = sessionId).first()
 
-        # session Data!
+        # session Data! 
     elif session:
 
         if session == None:
@@ -1073,15 +1119,17 @@ def prestoTickets():
                     "phone": "0"+msisdn[-9:],
                     "callbackUrl":"https://talanku.com/confirmTicket/"+str(ticket.id),
                     "appId":event.organiser,
-                    "paymentId":"12",
-                    "amount":0.20,
-                    "total":0.20,
+                    "paymentId":ticket.id,
+                    "amount":ticket.bought,
+                    "total":ticket.total,
                     "ref":ticket.name,
+                    "reference":ticket.name,
                     "recipient":event.organiser,
                     "percentage":str(event.charges),
                     "network":mobileNetwork
                 }
 
+                print("payementInfo")
                 print(payementInfo)
 
                 r = requests.post('https://prestoghana.com/korba', json=payementInfo)
@@ -1091,16 +1139,134 @@ def prestoTickets():
 
     else:
         return make_response(naloresponse(msisdn, "There was a problem. Please try again alittle later while we rectify the issue. " , False))
-        
+
+def randomLetters(y):
+       return ''.join(random.choice(string.ascii_letters) for x in range(y))
+
+@app.route('/generateMultipleCodes', methods=['GET', 'POST'])
+def generateMultipleCodes(ticket):
+    # generate similar codes with differing ids
+    try:
+        newTicket = Ticket(
+            sessionId = ticket.sessionId,
+            name = ticket.name,
+            phoneNumber = ticket.phoneNumber,
+            numberOfTickets = ticket.numberOfTickets,
+            confirmTickets = ticket.confirmTickets,
+            paid = ticket.paid,
+            code = ticket.code,
+            # TODO: ticketCode
+            bought = ticket.bought,
+            total = ticket.total,
+            event = ticket.event,
+            scanned = ticket.scanned
+        )
+        db.session.add(newTicket)
+        db.session.commit()
+    except Exception as e:
+        print(e)
+        print("Could not generate remainder tickets")
+    return newTicket
+
+# @app.route('/generateTicketCode/<ticketId>', methods=['GET', 'POST'])
+def generateTicketCodes(ticketId):
+    ticket = Ticket.query.get_or_404(ticketId)
+    event = Event.query.get_or_404(ticket.event)
+    numberOfTickets = int(ticket.numberOfTickets)
+    print(numberOfTickets)
+
+    ticketCodes = [] #Empty Array
+
+    # If one, generate one, else generate one and add the others..
+    initialTicket = str(ticket.id)+str(randomLetters(5))+str("PRS")+str(event.slug)+str(randomLetters(5))+str("0")
+    ticketCodes.append(initialTicket)
+    # First ticket has been generated
+
+    if numberOfTickets > 1:
+
+        for t in range(numberOfTickets - 1):
+            ticket = generateMultipleCodes(ticket)
+
+            t += 1 #Indexing to start at 1 not 0
+
+            ticketCode = str(ticket.id)+str(randomLetters(5))+str("PRS")+str(event.slug)+str(randomLetters(5))+str(t)
+
+            print(ticketCode.upper())
+            ticketCodes.append(ticketCode)
+
+    print("ticketCodes")
+    print(ticketCodes)
+
+    for count, t in enumerate(ticketCodes):
+        count += 1
+    # for t in ticketCodes:
+        try:
+            message = "Hi " + str(ticket.name) +" you have successfully bought " + str(ticket.numberOfTickets)+ " ticket(s) for " + event.name + "\n \nTicket " + str(count)+ ":\n" + str(t).upper() + "\nhttps://tickets.prestoghana.com/code/"+str(t).upper() + "\n \nPowered by PrestoGhana."
+            # sendNaloSms(message)
+            sendmessage(ticket.phoneNumber,message)
+        except Exception as e:
+            print(e)
+            print("Couldnt send nalo sms!!!!")
+        # try:
+            # ticket.ticketCode = str(ticketCode)
+            # print(ticketCode)
+            # ticket.paid = True
+            # db.session.commit()
+            # print("Updated ticket: " + str(ticket.id) + " - " + ticket.name + " - " + ticket.paid)
+        # except Exception as e:
+            # print(e)
+            # print("Couldn't create ticket!!")
+
+    return ticketCodes
+
+@app.route('/scanned', methods=['GET', 'POST'])
+@app.route('/scanned/<int:id>', methods=['GET', 'POST'])
+def scanned(id):
+    ticket = Ticket.query.get_or_404(id)
+    event = Event.query.get_or_404(ticket.event)
+    return render_template("ticketDetails.html", ticket=ticket, event=event)
+
 @app.route('/confirmTicket/<ticketId>', methods=['GET', 'POST'])
 def confirmTicket(ticketId):
     print(ticketId)
     ticket = Ticket.query.get_or_404(ticketId)
+    event = Event.query.get_or_404(ticket.event)
+
+    try:
+        print(ticket)
+        print(event)
+    except Exception as e:
+        print("Fields are empty...")
+
+    status = "SUCCESS"
+
+    generated = False
+
+    response = {
+        "name":ticket.name,
+        "tickets":ticket.numberOfTickets,
+        "generated":generated
+    }
     
     if ticket != None:
         if ticket.paid == False:
-            if request.status == "SUCCESS":
-                ticketCode = str(ticket.id)+str(prestoTransactionId)+str(event.slug)
+            if status == "SUCCESS":
+
+                codes = generateTicketCodes(ticket.id)
+                print(codes)
+
+                #TODO:  Validate this please
+                generated = True
+
+            else:
+                print("This transaction failed!")
+        else:
+            print("This ticket has been paiad for already ei!")
+    else:
+        print("This ticket could not be found! Warris going on???")
+
+    return make_response(response)
+
     # if successful
     # if not already paid
     # Generate ticket code = 1PRS34TB24QZF

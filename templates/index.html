@@ -10,7 +10,7 @@
     {{ form.hidden_tag() }}
     {{form.search(class="form-control",style="width:85%; border: none", placeholder="Search for an item")}}
     <!-- {{form.submit(style="width: 15%; background-color:  rgb(255, 134, 154);;", class="btn btn-success")}} -->
-    <button style="width: 15%; color:  rgb(255, 134, 154);; background-color: transparent; border: none;" class="btn btn-success" type="submit"><i class="fas fa-search"></i></button>
+    <button style="width: 15%; color:  green; background-color: transparent; border: none;" class="btn btn-success" type="submit"><i class="fas fa-search"></i></button>
 
 </form>
 <br>
@@ -28,7 +28,7 @@
 </button> -->
   {% if cart|length >= 1 %}
   <a href="{{url_for('cart')}}" style="text-decoration: none;">
-  <div style="width: 100%; background-color: rgb(255, 134, 154); font-weight: bold; color: white; padding: 26px; border-radius: 10px; display: flex; justify-content: space-between; " >
+  <div style="width: 100%; background-color:greenfont-weight: bold; color: white; padding: 26px; border-radius: 10px; display: flex; justify-content: space-between; " >
   <h6 style="margin-bottom: 0;">Click to view the {{cart|length}} items in your cart😍</h6>
   
   <h6>{{cart|length}}</h6> 
@@ -75,7 +75,7 @@
   <a style="text-decoration: none;" href="{{url_for('preview', itemid=item.id)}}">
   <div class="card space" style="margin-bottom: 5vh; padding: 0; border: none; border-radius: 0 0 10px 10px;">
       <img src="{{item.image}}" loading="lazy" style="object-fit: cover; width: 100%; height: 20vh;" alt="">
-      <div style="background-color: rgb(255, 233, 237); padding: 10px; border-radius: 0 0 10px 10px;">  
+      <div style="background-color: rgba(0, 128, 0, 0.193); padding: 10px; border-radius: 0 0 10px 10px;">  
         <h6 style="color: black;" >{{item.name}}</h6>
         <div style="display: flex; justify-content: space-between;">
           <h6 style="font-size: small;" class="text-muted">Ghc{{item.price}}</h6>
@@ -96,7 +96,7 @@
 
 
 <!-- Modal -->
-
+<!-- 
 {% if initial %}
 
 <div class="modal fade " id="staticBackdrop" style="height: 100%;" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
@@ -104,7 +104,7 @@
     <div class="modal-content">
       <div class="modal-body">
         <img src="../static/flyer.jpeg" alt="night under the stars" style="width: 100%;" srcset="">
-        <h6 style="text-align:center">Come and wind down this <span style="color:  rgb(255, 134, 154); font-weight: bold;"> Saturday, 26th November </span> at the talanku movie night, happening at <span style="color:  rgb(255, 134, 154); font-weight: bold;" >Pronto Hostels</span></h6>
+        <h6 style="text-align:center">Come and wind down this <span style="color: greenfont-weight: bold;"> Saturday, 26th November </span> at the talanku movie night, happening at <span style="color: greenfont-weight: bold;" >Pronto Hostels</span></h6>
       </div>
       <div style="display: flex; width:100%; margin-bottom: 3vh; justify-content: space-around;">
         <button type="button" class="button" style="width: 90%;" data-bs-dismiss="modal">Definately!!</button>
@@ -112,7 +112,7 @@
     </div>
   </div>
 </div>
-{% endif %}
+{% endif %} -->
 
   
 </div>

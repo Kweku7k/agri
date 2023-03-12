@@ -18,7 +18,7 @@ a{
 .ellipse{
   width: 50px;
   height: 50px;
-  background-color:  rgb(255, 134, 154);;
+  background-color:  green;
   border-radius: 50%;
   margin-top: auto;
   margin-bottom: auto;
@@ -40,7 +40,6 @@ a{
 .flow{
   display: flex;
   justify-content: space-between;
-
 }
 /* ---------- */
 
@@ -86,7 +85,7 @@ a{
 .button{
   border: none;
   width: 45%;
-  background-color:  rgb(255, 134, 154);;
+  background-color:  green;;
   border-radius: 10px;
   color: white;
   padding: 20px;
@@ -96,7 +95,7 @@ a{
 .login-button{
   border: none;
   width: 100%;
-  background-color:  rgb(255, 134, 154);;
+  background-color:  green;;
   border-radius: 10px;
   color: white;
   padding: 20px;
@@ -130,7 +129,7 @@ a{
 .landing{
   width: 100vw;
   height: 50vh;
-  background-color:  rgb(255, 134, 154);
+  background-color:  green;
   background-image: url(../img/f683689acb8f3382022a27ceb5f66b3d.jpg);
 }
 
